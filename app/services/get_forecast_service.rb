@@ -5,6 +5,7 @@ class GetForecastService < ApplicationService
 
   ZIP_FORMAT = /\A(\d{5})(-\d{4})?\z/
   CACHE_TTL = 30.minutes
+  PLACE_CACHE_TTL = 90.days
 
   def initialize(zip:)
     @zip = zip.to_s.strip[ZIP_FORMAT, 1] or raise InvalidZip, "Enter a 5-digit ZIP code."
@@ -25,8 +26,12 @@ class GetForecastService < ApplicationService
 
   def cache_key = "forecast/v1/us/#{zip}"
 
+  def find_place
+    Rails.cache.fetch("zip/v1/us/#{zip}", expires_in: PLACE_CACHE_TTL) { ZippopotamClient.find_zip(zip) }
+  end
+
   def fetch_forecast
-    place = ZippopotamClient.find_zip(zip) or raise AddressNotFound, "Couldn't find that ZIP code."
+    place = find_place or raise AddressNotFound, "Couldn't find that ZIP code."
     weather = OpenMeteoClient.forecast(place[:lat], place[:lon])
     days = weather[:days].map { |day| Forecast::Day.new(**day) }
     today = days.first

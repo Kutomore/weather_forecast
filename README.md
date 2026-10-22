@@ -74,6 +74,8 @@ GET /?zip=95014
 
 The "cached" flag is set for each request rather than stored in the cache, and failed lookups are never cached, so the next request simply retries.
 
+ZIP lookups get their own cache entry (`zip/v1/us/95014`) that lasts 90 days, because a ZIP's coordinates almost never change. When a forecast expires, refreshing it only calls Open-Meteo, and a Zippopotam outage only affects ZIPs the app hasn't seen recently. Both keys include the country, so adding international support won't collide with existing entries.
+
 **Solid Cache on SQLite instead of Redis.** I chose SQLite for simplicity, and Solid Cache (the Rails 8 default) follows the same idea: no extra service to run. Development uses the same cache store as production, so caching behaves the same while developing and demoing. The app's code only uses the `Rails.cache` API, so moving to Redis or another database is a configuration change.
 
 **Hotwire instead of a JavaScript framework.** The UI is one form and one result. A Turbo Frame swaps in only the result area with no full page reload, and the URL updates (`/?zip=95014`), so results can be bookmarked and survive a refresh. There's no custom JavaScript and no JS build step. A separate React frontend would add an API layer and a build pipeline without any benefit to the user here.
@@ -91,7 +93,7 @@ All specs stub the external APIs with WebMock, which also blocks any real HTTP c
 | Layer | Spec | What it covers |
 |---|---|---|
 | HTTP and API clients | `spec/lib` | Exact request parameters, response mapping, a 404 meaning "not found", and every other failure (error status, timeout, refused connection, invalid JSON) becoming `JsonHttp::Error`. |
-| Service | `spec/services` | ZIP validation and ZIP+4 handling, unknown ZIPs, cache hits making no API calls, and failures not being cached. |
+| Service | `spec/services` | ZIP validation and ZIP+4 handling, unknown ZIPs, cache hits making no API calls, an expired forecast reusing the cached ZIP lookup, and failures not being cached. |
 | Controller and view | `spec/requests` | No lookup without a ZIP, rendering of the forecast and the cache indicator, and each error message. The service is stubbed here, because the layers below have their own specs. |
 | End to end | `spec/system` | A user enters a ZIP, sees the forecast, searches again and sees "Cached result", through the real service and clients. |
 
@@ -104,7 +106,7 @@ The test environment normally uses `:null_store`, so specs tagged `:caching` get
 
 ## Known limitations
 
-- **Zippopotam.us is a free community service with no uptime guarantee.** For production I'd use a paid provider with an SLA. Since a ZIP's coordinates almost never change, I'd also cache ZIP lookups much longer than forecasts (days instead of 30 minutes), so a geocoder outage would only affect ZIPs never seen before.
+- **Zippopotam.us is a free community service with no uptime guarantee.** ZIP lookups are cached for 90 days, which softens an outage, but for production I'd use a paid provider with an SLA.
 - **A ZIP code gets one forecast for its center point.** That's what the requirements ask for, and weather rarely varies much within a ZIP, but very large rural ZIP codes can span different conditions.
 - **"Current" temperatures can be up to 30 minutes old** when served from the cache. The page shows when the data was fetched.
 - **Styling is minimal,** following the "functionality is a priority over form" guideline.

@@ -38,6 +38,16 @@ RSpec.describe GetForecastService, :caching do
           expect(forecast.cached).to be(true)
         end
       end
+
+      context "after the forecast expires" do
+        before { travel described_class::CACHE_TTL + 1.minute }
+
+        it "refreshes the forecast but reuses the cached ZIP lookup" do
+          expect(forecast.cached).to be(false)
+          expect(any_zippopotam_request).to have_been_made.once
+          expect(any_open_meteo_request).to have_been_made.twice
+        end
+      end
     end
 
     context "with a malformed ZIP" do
