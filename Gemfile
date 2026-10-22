@@ -52,4 +52,7 @@ group :test do
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
   gem "capybara"
   gem "selenium-webdriver"
+
+  # Stub HTTP requests and block real ones in specs [https://github.com/bblimke/webmock]
+  gem "webmock"
 end
