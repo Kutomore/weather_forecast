@@ -1,8 +1,10 @@
 class ForecastsController < ApplicationController
   def show
-    return if params[:zip].blank?
+    @zip = params[:zip].presence || cookies[:last_zip]
+    return if @zip.blank?
 
-    @forecast = GetForecastService.call(zip: params[:zip])
+    @forecast = GetForecastService.call(zip: @zip)
+    cookies[:last_zip] = { value: @zip, expires: 1.year }
   rescue GetForecastService::Error => e
     @error = e.message
   end

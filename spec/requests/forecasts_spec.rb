@@ -39,6 +39,27 @@ RSpec.describe "Forecasts", type: :request do
       end
     end
 
+    context "when returning without a ZIP code" do
+      it "shows the forecast for the last ZIP looked up" do
+        allow(GetForecastService).to receive(:call).with(zip: "95014").and_return(forecast)
+        get root_path, params: { zip: "95014" }
+
+        get root_path
+
+        expect(GetForecastService).to have_received(:call).twice
+        expect(response.body).to include("Cupertino, CA 95014", 'value="95014"')
+      end
+
+      it "doesn't remember a ZIP whose lookup failed" do
+        allow(GetForecastService).to receive(:call).and_raise(GetForecastService::AddressNotFound, "Couldn't find that ZIP code.")
+        get root_path, params: { zip: "00000" }
+
+        get root_path
+
+        expect(GetForecastService).to have_received(:call).once
+      end
+    end
+
     context "when the lookup fails" do
       {
         GetForecastService::InvalidZip => "Enter a 5-digit ZIP code.",

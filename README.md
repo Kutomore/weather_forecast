@@ -12,7 +12,7 @@ cd weather_forecast
 docker compose up
 ```
 
-Then open http://localhost:3000 and enter a ZIP code (for example `95014`). Search the same ZIP again to see the "Cached result" indicator.
+Then open http://localhost:3000 and enter a ZIP code (for example `95014`). Search the same ZIP again to see the "Cached result" indicator. The app remembers the last ZIP that returned a forecast (in a cookie), so reopening it shows that forecast again.
 
 
 **Tests:**
@@ -119,3 +119,5 @@ The test environment normally uses `:null_store`, so specs tagged `:caching` get
 - **Weather conditions and hourly forecasts.** Open-Meteo already provides weather codes for icons and hourly data. This means extending the client, the `Forecast` object and the view.
 - **Resilience.** Retries with backoff for temporary API errors, and serving a slightly stale cached forecast when an API is down.
 - **Styling** and a unit toggle between °F and °C.
+- **Tracking several places.** Turn "check a ZIP" into a saved list of ZIPs, each shown as its own card. Without accounts, the list would live in the session cookie, so it's per browser; real accounts would move it to a table. A list of 10 ZIPs could mean 20 API calls on a cold cache, so the cards would load lazily (one Turbo Frame per place with `loading: :lazy`), letting each one fetch on its own.
+- **Live updates.** Push refreshed forecasts to open pages with Turbo Streams over Action Cable, driven by a recurring job that refreshes cached ZIPs before they expire. I'd hold off on this: forecasts only change every 30 minutes, so reloading the page on that interval gets almost the same result with no websocket or job infrastructure. It would be worth it alongside alerts (frost, heat) where timing matters.
