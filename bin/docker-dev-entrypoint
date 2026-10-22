@@ -1,0 +1,7 @@
+#!/bin/bash -e
+
+# Installs missing gems into the bundle volume before any command (server, specs, console),
+# so `docker compose run` works on a fresh clone without starting the app first.
+bundle check > /dev/null || bundle install
+
+exec "$@"
