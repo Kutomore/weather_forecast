@@ -8,7 +8,9 @@
   <%= f.submit "Get forecast", name: nil, data: { turbo_submits_with: "Loading…" } %>
 <% end %>
 
-<%= turbo_frame_tag "forecast" do %>
+<%= turbo_frame_tag "forecast", aria: { live: "polite" } do %>
     <%= render @forecast if @forecast %>
-    <p class='error'><%= @error %></p>
+    <% if @error %>
+        <p class='error' role='alert'><%= @error %></p>
+    <% end%>
 <% end %>
