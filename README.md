@@ -27,3 +27,4 @@ docker compose run --rm web bundle exec rspec
 
 - **International postal codes.** Nominatim and Open-Meteo both work worldwide. Supporting other countries means adding a country field and including it in the cache key, since postal codes aren't unique across countries (`75001` is both Paris and Addison, TX).
 - **Search by place name** ("Madrid", "Lisbon") and places without postal codes. This would need free-text geocoding with autocomplete, forecasts cached by rounded coordinates (which matches Open-Meteo's forecast grid), and geocoding results cached separately.
+- **"Use my location" button.** Browser geolocation only returns coordinates, so a small Stimulus controller would reverse-geocode them with Nominatim and fill in the ZIP. It was left out to keep the scope tight, and because testing it needs a headless browser in the test setup.
