@@ -3,7 +3,7 @@ require "rails_helper"
 RSpec.describe "Looking up a forecast", type: :system, caching: true do
   before do
     driven_by :rack_test
-    stub_nominatim
+    stub_zippopotam
     stub_open_meteo
   end
 
@@ -23,7 +23,7 @@ RSpec.describe "Looking up a forecast", type: :system, caching: true do
   end
 
   it "shows an error for a ZIP that doesn't exist" do
-    stub_nominatim(zip: "00000", results: [])
+    stub_unknown_zip("00000")
 
     visit root_path
     fill_in "ZIP code", with: "00000"

@@ -4,11 +4,11 @@ RSpec.describe GetForecastService, :caching do
   subject(:forecast) { described_class.call(zip:) }
 
   let(:zip) { "95014" }
-  let(:any_nominatim_request) { a_request(:get, NominatimClient::URL).with(query: hash_including({})) }
+  let(:any_zippopotam_request) { a_request(:get, /\A#{Regexp.escape(ZippopotamClient::URL)}/) }
   let(:any_open_meteo_request) { a_request(:get, OpenMeteoClient::URL).with(query: hash_including({})) }
 
   before do
-    stub_nominatim
+    stub_zippopotam
     stub_open_meteo
   end
 
@@ -27,7 +27,7 @@ RSpec.describe GetForecastService, :caching do
 
       it "serves the forecast from the cache without calling the APIs again" do
         expect(forecast.cached).to be(true)
-        expect(any_nominatim_request).to have_been_made.once
+        expect(any_zippopotam_request).to have_been_made.once
         expect(any_open_meteo_request).to have_been_made.once
       end
 
@@ -40,34 +40,19 @@ RSpec.describe GetForecastService, :caching do
       end
     end
 
-    context "with a ZIP outside a city" do
-      let(:zip) { "99723" }
-
-      before do
-        rural = WeatherApiStubs::CUPERTINO.merge(
-          "address" => { "postcode" => "99723", "county" => "North Slope Borough", "ISO3166-2-lvl4" => "US-AK" }
-        )
-        stub_nominatim(zip:, results: [ rural ])
-      end
-
-      it "falls back to the county for the location" do
-        expect(forecast.location).to eq("North Slope Borough, AK 99723")
-      end
-    end
-
     context "with a malformed ZIP" do
       let(:zip) { "9501" }
 
       it "raises InvalidZip without calling the APIs" do
         expect { forecast }.to raise_error(described_class::InvalidZip)
-        expect(any_nominatim_request).not_to have_been_made
+        expect(any_zippopotam_request).not_to have_been_made
       end
     end
 
     context "with a ZIP that doesn't exist" do
       let(:zip) { "00000" }
 
-      before { stub_nominatim(zip:, results: []) }
+      before { stub_unknown_zip(zip) }
 
       it "raises AddressNotFound" do
         expect { forecast }.to raise_error(described_class::AddressNotFound)
@@ -75,7 +60,7 @@ RSpec.describe GetForecastService, :caching do
     end
 
     context "when an API times out" do
-      before { stub_request(:get, NominatimClient::URL).with(query: hash_including({})).to_timeout }
+      before { stub_request(:get, "#{ZippopotamClient::URL}/95014").to_timeout }
 
       it "raises Error" do
         expect { forecast }.to raise_error(described_class::Error)

@@ -33,7 +33,7 @@ docker compose run --rm web bin/brakeman
 The requirements boil down to: take an address, find its ZIP code, fetch a forecast, and cache it by ZIP for 30 minutes. I treated the ZIP code as the core of the design, because both the forecast and the cache are scoped by it:
 
 1. The user enters a ZIP code. The form validates the format in the browser, and the server validates it again.
-2. On a cache miss, the app geocodes the ZIP into coordinates and a place name ([Nominatim](https://nominatim.org/)), then fetches the forecast for those coordinates ([Open-Meteo](https://open-meteo.com/)).
+2. On a cache miss, the app looks up the ZIP's coordinates and place name ([Zippopotam.us](https://zippopotam.us/)), then fetches the forecast for those coordinates ([Open-Meteo](https://open-meteo.com/)).
 3. The result is cached under the ZIP code, so every later lookup of that ZIP within 30 minutes makes no external calls at all.
 
 ## Architecture
@@ -42,7 +42,7 @@ The requirements boil down to: take an address, find its ZIP code, fetch a forec
 GET /?zip=95014
  └─ ForecastsController#show      reads the param, renders the result or the error
      └─ GetForecastService        validates the ZIP, caches by ZIP, builds the Forecast
-         ├─ NominatimClient       ZIP → coordinates and place name
+         ├─ ZippopotamClient      ZIP → place name and coordinates
          ├─ OpenMeteoClient       coordinates → current temperature, daily highs and lows
          └─ (both use) JsonHttp   GET with timeouts, JSON parsing, a single error type
 ```
@@ -51,8 +51,8 @@ GET /?zip=95014
 |---|---|---|
 | `ForecastsController` | `app/controllers` | One `show` action. Calls the service when a ZIP is present and turns service errors into a message. |
 | `GetForecastService` | `app/services` | ZIP validation and normalization, caching, and assembling the result. The only place that knows the business rules. |
-| `NominatimClient`, `OpenMeteoClient` | `lib/` | One class per external API. They know URLs, parameters and response formats, and return plain Ruby hashes. |
-| `JsonHttp` | `lib/` | Generic HTTP helper. Every network, status or parsing failure becomes `JsonHttp::Error`. |
+| `ZippopotamClient`, `OpenMeteoClient` | `lib/` | One class per external API. They know URLs, parameters and response formats, and return plain Ruby hashes. |
+| `JsonHttp` | `lib/` | Generic HTTP helper. A 404 returns `nil` ("not found"), and every other network, status or parsing failure becomes `JsonHttp::Error`. |
 | `Forecast`, `Forecast::Day` | `app/models` | Immutable value objects (`Data.define`), not database models. The view only ever sees these. |
 | `forecasts/show`, `forecasts/_forecast` | `app/views` | The form, and the result rendered inside a Turbo Frame. |
 
@@ -62,9 +62,9 @@ GET /?zip=95014
 
 **US only.** Postal codes aren't unique across countries (`75001` is both Paris and Addison, TX), so supporting other countries means adding a country to the input and to the cache key. I kept the scope to US ZIP codes and listed international support under next steps. Temperatures are in Fahrenheit for the same reason.
 
-**Geocoding by postal code alone.** I tested Nominatim's structured search and found that adding the city made it match the whole city instead of the postal code. Searching by postal code returns the ZIP's own coordinates, which also keeps the cache consistent: everyone who searches a ZIP gets the forecast for that ZIP, not for whichever address happened to fill the cache first.
+**A ZIP-specific lookup instead of a general geocoder.** Zippopotam.us maps a ZIP code to its place name and coordinates, using USPS ZIP data from GeoNames. I started with Nominatim (OpenStreetMap) and switched after finding ZIP codes it couldn't resolve (see [Challenges](#challenges)). Looking up the ZIP itself, rather than a street address, also keeps the cache consistent: everyone who searches a ZIP gets the forecast for that ZIP's location.
 
-**Nominatim and Open-Meteo.** Both are free and need no API key, so the app runs with `docker compose up` and no setup. I also considered weather APIs that accept an address or ZIP directly (OpenWeatherMap, Visual Crossing, WeatherAPI). They would save one call, but they all need an API key, which every reviewer would have to create before the app could start. Since both calls only happen on a cache miss, the second call costs little.
+**Zippopotam and Open-Meteo.** Both are free and need no API key, so the app runs with `docker compose up` and no setup. I also considered weather APIs that accept an address or ZIP directly (OpenWeatherMap, Visual Crossing, WeatherAPI). They would save one call, but they all need an API key, which every reviewer would have to create before the app could start. Since both calls only happen on a cache miss, the second call costs little.
 
 **Caching the external calls, not the page.** The cache wraps the two API calls (`Rails.cache.fetch`, keyed by ZIP), which are the slow and rate-limited part. I ruled out the other Rails caching options:
 - Fragment caching only saves template rendering, which is already cheap.
@@ -90,8 +90,8 @@ All specs stub the external APIs with WebMock, which also blocks any real HTTP c
 
 | Layer | Spec | What it covers |
 |---|---|---|
-| HTTP and API clients | `spec/lib` | Exact request parameters, response mapping, and every failure (non-2xx status, timeout, refused connection, invalid JSON) becoming `JsonHttp::Error`. |
-| Service | `spec/services` | ZIP validation and ZIP+4 handling, cache hits making no API calls, failures not being cached, and fallback place names for rural ZIPs. |
+| HTTP and API clients | `spec/lib` | Exact request parameters, response mapping, a 404 meaning "not found", and every other failure (error status, timeout, refused connection, invalid JSON) becoming `JsonHttp::Error`. |
+| Service | `spec/services` | ZIP validation and ZIP+4 handling, unknown ZIPs, cache hits making no API calls, and failures not being cached. |
 | Controller and view | `spec/requests` | No lookup without a ZIP, rendering of the forecast and the cache indicator, and each error message. The service is stubbed here, because the layers below have their own specs. |
 | End to end | `spec/system` | A user enters a ZIP, sees the forecast, searches again and sees "Cached result", through the real service and clients. |
 
@@ -100,22 +100,20 @@ The test environment normally uses `:null_store`, so specs tagged `:caching` get
 ## Challenges
 
 - **Turning an address into a ZIP code reliably.** Free-text addresses are ambiguous, which is what led to the ZIP-only input.
-- **Nominatim's structured search** matched the city instead of the postal code when both were sent. I found this by testing the API directly, which is how I settled on geocoding by postal code only.
-- **Rural ZIP codes have no city** in OpenStreetMap (for example `99723` in Alaska). The place name falls back to town, village and then county, so it reads "North Slope Borough, AK 99723".
-- **Nominatim's usage policy** requires an identifying `User-Agent` and allows at most one request per second. Geocoding only happens on a cache miss, which keeps the app well within that limit.
+- **Valid ZIP codes that weren't found.** I first built the lookup on Nominatim (OpenStreetMap). During final testing, some ZIP codes that should have worked showed "Couldn't find that ZIP code", for example `88595` in El Paso, TX. After investigating, I found the cause was a limitation of Nominatim's data rather than a bug in the app: OpenStreetMap only knows a postcode if a mapped address uses it, and PO-box-only ZIP codes like `88595` have no street addresses. Rural ZIPs had a related gap, since some only had a county and no town name. I decided to switch to Zippopotam.us, which is built on USPS ZIP data. It found every ZIP I tested, including PO-box ZIPs, and returns the town name directly (`99723` became "Barrow, AK" instead of "North Slope Borough, AK"). Because each API has its own client, the switch only replaced one class; the service, the view and the rest of the tests didn't change.
 
 ## Known limitations
 
-- **The public Nominatim server isn't meant for heavy traffic.** For production use I'd switch to a paid geocoding provider or host Nominatim myself.
+- **Zippopotam.us is a free community service with no uptime guarantee.** For production I'd use a paid provider with an SLA. Since a ZIP's coordinates almost never change, I'd also cache ZIP lookups much longer than forecasts (days instead of 30 minutes), so a geocoder outage would only affect ZIPs never seen before.
 - **A ZIP code gets one forecast for its center point.** That's what the requirements ask for, and weather rarely varies much within a ZIP, but very large rural ZIP codes can span different conditions.
 - **"Current" temperatures can be up to 30 minutes old** when served from the cache. The page shows when the data was fetched.
 - **Styling is minimal,** following the "functionality is a priority over form" guideline.
 
 ## Next steps
 
-- **International postal codes.** Both APIs work worldwide. This needs a country field in the form and the country in the cache key.
+- **International postal codes.** Zippopotam.us covers around 60 countries and Open-Meteo works worldwide. This needs a country field in the form and the country in the cache key.
 - **Search by place name** ("Madrid", "Lisbon") and places without postal codes. This needs free-text geocoding with autocomplete, forecasts cached by rounded coordinates (which matches Open-Meteo's forecast grid), and geocoding results cached separately.
-- **"Use my location" button.** Browser geolocation only returns coordinates, so a small Stimulus controller would reverse-geocode them and fill in the ZIP. I built it, then removed it: it wasn't required, and testing it properly needs a headless browser in the test setup.
+- **"Use my location" button.** Browser geolocation only returns coordinates, so a small Stimulus controller would reverse-geocode them (Nominatim's reverse lookup works well for this) and fill in the ZIP. I built it, then removed it: it wasn't required, and testing it properly needs a headless browser in the test setup.
 - **Weather conditions and hourly forecasts.** Open-Meteo already provides weather codes for icons and hourly data. This means extending the client, the `Forecast` object and the view.
 - **Resilience.** Retries with backoff for temporary API errors, and serving a slightly stale cached forecast when an API is down.
 - **Styling** and a unit toggle between °F and °C.

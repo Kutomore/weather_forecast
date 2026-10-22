@@ -13,6 +13,20 @@ RSpec.describe JsonHttp do
       expect(get).to eq("results" => [ 1, 2 ])
     end
 
+    it "sends no query string when there are no params" do
+      stub_request(:get, "https://api.example.com/items/1").to_return_json(body: { id: 1 })
+
+      expect(described_class.get("https://api.example.com/items/1")).to eq("id" => 1)
+    end
+
+    context "when the resource doesn't exist" do
+      before { endpoint.to_return(status: 404, body: "{}") }
+
+      it "returns nil instead of raising" do
+        expect(get).to be_nil
+      end
+    end
+
     context "when the server responds with an error status" do
       before { endpoint.to_return(status: 503) }
 

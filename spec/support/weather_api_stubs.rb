@@ -1,12 +1,12 @@
 module WeatherApiStubs
   CUPERTINO = {
-    "lat" => "37.3230",
-    "lon" => "-122.0322",
-    "display_name" => "95014, Cupertino, Santa Clara County, California, United States",
-    "address" => {
-      "postcode" => "95014", "city" => "Cupertino", "county" => "Santa Clara County",
-      "state" => "California", "ISO3166-2-lvl4" => "US-CA", "country_code" => "us"
-    }
+    "post code" => "95014",
+    "country" => "United States",
+    "country abbreviation" => "US",
+    "places" => [
+      { "place name" => "Cupertino", "state" => "California", "state abbreviation" => "CA",
+        "latitude" => "37.318", "longitude" => "-122.0449" }
+    ]
   }.freeze
 
   FORECAST = {
@@ -18,14 +18,16 @@ module WeatherApiStubs
     }
   }.freeze
 
-  def stub_nominatim(zip: "95014", results: [ CUPERTINO ])
-    stub_request(:get, NominatimClient::URL)
-      .with(query: hash_including("postalcode" => zip, "countrycodes" => "us"),
-            headers: { "User-Agent" => NominatimClient::USER_AGENT })
-      .to_return_json(body: results)
+  def stub_zippopotam(zip: "95014", body: CUPERTINO)
+    stub_request(:get, "#{ZippopotamClient::URL}/#{zip}").to_return_json(body:)
   end
 
-  def stub_open_meteo(lat: CUPERTINO["lat"], lon: CUPERTINO["lon"])
+  # Zippopotam answers unknown ZIPs with a 404 and an empty JSON object
+  def stub_unknown_zip(zip)
+    stub_request(:get, "#{ZippopotamClient::URL}/#{zip}").to_return(status: 404, body: "{}")
+  end
+
+  def stub_open_meteo(lat: "37.318", lon: "-122.0449")
     stub_request(:get, OpenMeteoClient::URL)
       .with(query: hash_including("latitude" => lat, "longitude" => lon, "temperature_unit" => "fahrenheit"))
       .to_return_json(body: FORECAST)

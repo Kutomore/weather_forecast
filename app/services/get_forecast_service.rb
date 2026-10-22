@@ -26,22 +26,16 @@ class GetForecastService < ApplicationService
   def cache_key = "forecast/v1/us/#{zip}"
 
   def fetch_forecast
-    place = NominatimClient.find_zip(zip) or raise AddressNotFound, "Couldn't find that ZIP code."
-    weather = OpenMeteoClient.forecast(place["lat"], place["lon"])
+    place = ZippopotamClient.find_zip(zip) or raise AddressNotFound, "Couldn't find that ZIP code."
+    weather = OpenMeteoClient.forecast(place[:lat], place[:lon])
     days = weather[:days].map { |day| Forecast::Day.new(**day) }
     today = days.first
 
-    Forecast.new(location: location_name(place["address"]), current_temp: weather[:current_temp],
+    Forecast.new(location: "#{place[:name]}, #{place[:state]} #{zip}", current_temp: weather[:current_temp],
                 high: today.high, low: today.low, daily: days,
                 fetched_at: Time.current, cached: false)
   rescue JsonHttp::Error => e
     Rails.logger.warn("Forecast lookup failed: #{e.message}")
     raise Error, "Forecast service unavailable, try again later."
-  end
-
-  def location_name(address)
-    locality = address.values_at("city", "town", "village", "county").compact.first
-    state = address["ISO3166-2-lvl4"]&.delete_prefix("US-")
-    [ locality, "#{state} #{zip}".strip ].compact.join(", ")
   end
 end
