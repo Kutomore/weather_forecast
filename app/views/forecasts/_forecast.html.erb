@@ -1,16 +1,19 @@
-<section>
+<section class="forecast">
   <h2><%= forecast.location %></h2>
 
   <% if forecast.cached %>
-    <p><mark>Cached result</mark> from <%= time_ago_in_words(forecast.fetched_at) %> ago</p>
+    <p class="cache-status"><mark>Cached result</mark> from <%= time_ago_in_words(forecast.fetched_at) %> ago</p>
   <% end %>
 
-  <p><strong><%= forecast.current_temp.round %>°F</strong></p>
-  <p>High <%= forecast.high.round %>° · Low <%= forecast.low.round %>°</p>
+  <p class="temperature"><%= forecast.current_temp.round %>°F</p>
+  <p class="high-low">High <%= forecast.high.round %>° · Low <%= forecast.low.round %>°</p>
 
-  <ul>
+  <ul class="days">
     <% forecast.daily.each do |day| %>
-      <li><%= day.date.strftime("%a %-d") %>: <%= day.high.round %>° / <%= day.low.round %>°</li>
+      <li>
+        <span><%= day.date.strftime("%a %-d") %></span>
+        <span><%= day.high.round %>° / <%= day.low.round %>°</span>
+      </li>
     <% end %>
   </ul>
 </section>
