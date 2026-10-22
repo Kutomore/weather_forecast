@@ -1,0 +1,18 @@
+# Development image. Code is bind-mounted and gems live in a named volume (see compose.yaml).
+# For the production image, see Dockerfile.
+ARG RUBY_VERSION=3.4.11
+FROM docker.io/library/ruby:$RUBY_VERSION-slim
+
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y build-essential git libyaml-dev pkg-config sqlite3 && \
+    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+
+# Match the host user so files written through the bind mount stay editable.
+ARG UID=1000
+RUN useradd rails --uid $UID --create-home --shell /bin/bash && \
+    mkdir /bundle && chown rails /bundle
+USER rails
+
+ENV BUNDLE_PATH=/bundle
+WORKDIR /rails
+EXPOSE 3000

@@ -1,0 +1,16 @@
+<section>
+  <h2><%= forecast.location %></h2>
+
+  <% if forecast.cached %>
+    <p><mark>Cached result</mark> from <%= time_ago_in_words(forecast.fetched_at) %> ago</p>
+  <% end %>
+
+  <p><strong><%= forecast.current_temp.round %>°F</strong></p>
+  <p>High <%= forecast.high.round %>° · Low <%= forecast.low.round %>°</p>
+
+  <ul>
+    <% forecast.daily.each do |day| %>
+      <li><%= day.date.strftime("%a %-d") %>: <%= day.high.round %>° / <%= day.low.round %>°</li>
+    <% end %>
+  </ul>
+</section>

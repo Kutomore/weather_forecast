@@ -1,0 +1,14 @@
+<%= form_with url: root_path, method: :get, data: { controller: "geolocation", turbo_frame: "forecast", turbo_action: "advance" } do |f| %>
+  <%= f.label :zip, "ZIP code" %>
+  <%= f.text_field :zip, value: params[:zip], required: true, pattern: '\d{5}(-\d{4})?', inputmode: "numeric", autocomplete: "postal-code", data: { geolocation_target: "zip" } %>
+
+  <button type="button" data-geolocation-target="button" data-action="geolocation#locate">
+    Use my location
+  </button>
+  <%= f.submit "Get forecast", name: nil, data: { turbo_submits_with: "Loading…" } %>
+<% end %>
+
+<%= turbo_frame_tag "forecast" do %>
+    <%= render @forecast if @forecast %>
+    <p class='error'><%= @error %></p>
+<% end %>
